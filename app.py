@@ -1,39 +1,58 @@
 from flask import Flask, escape, url_for, render_template
+from flask_sqlalchemy import SQLAlchemy
+import os, click
 app = Flask(__name__)
+
+@app.cli.command()
+@click.option('--drop', is_flag=True, help='Create after drop.')
+def initdb(drop):
+    """Initialize the database."""
+    if drop:
+        db.drop_all()
+    db.create_all()
+    click.echo('Initialized database.')
+
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.root_path, 'data.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # 关闭对模型修改的监控
+db = SQLAlchemy(app)
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)  # id 主键
+    name = db.Column(db.String(20))  # 名字
+
+class Movie(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(60))
+    year = db.Column(db.String(4))
+
+@app.cli.command()
+def forge():
+    """Generate fake data."""
+    db.create_all()
+
+    name = 'liushaui'
+    movies = [
+        {'title': 'My Neighbor Totoro', 'year': '1988'},
+        {'title': 'Dead Poets Society', 'year': '1989'},
+        {'title': 'A Perfect World', 'year': '1993'},
+        {'title': 'Leon', 'year': '1994'},
+        {'title': 'Mahjong', 'year': '1996'},
+        {'title': 'Swallowtail Butterfly', 'year': '1996'},
+        {'title': 'King of Comedy', 'year': '1999'},
+        {'title': 'Devils on the Doorstep', 'year': '1999'},
+        {'title': 'WALL-E', 'year': '2008'},
+        {'title': 'The Pork of Music', 'year': '2012'},
+    ]
+    user = User(name=name)
+    db.session.add(user)
+    for m in movies:
+        movie = Movie(title=m['title'], year=m['year'])
+        db.session.add(movie)
+    db.session.commit()
+    click.echo('Done.')
 
 @app.route('/')
 def index():
-    return render_template('index.html', name=name, movies=movies)
-#接下来，我们要注册一个处理函数，这个函数是处理某个请求的处理函数，
-# Flask 官方把它叫做视图函数（view funciton），你可以理解为“请求处理函数”。
-#所谓的“注册”，就是给这个函数戴上一个装饰器帽子。我们使用 app.route()
-# 装饰器来为这个函数绑定对应的 URL，当用户在浏览器访问这个 URL 的时候，
-# 就会触发这个函数，获取返回值，并把返回值显示到浏览器窗口：
-
-@app.route('/user/<name>')
-def user_page(name):
-    return 'User : %s' % escape(name)
-#除此之外，它还有一个重要的作用：作为代表某个路由的端点（endpoint），
-# 同时用来生成 URL。对于程序内的 URL，为了避免手写，Flask 提供了一个 url_for 函数来生成 URL，
-# 它接受的第一个参数就是端点值，默认为视图函数的名称：
-@app.route('/test')
-def test_url_for():
-    print(url_for('index')) #输出hello
-    print(url_for('user_page', name='tom'))
-    print(url_for('test_url_for'))
-    print(url_for('test_url_for', num=2)) #输出/test?num=2
-    return 'Test page'
-
-name = 'liushaui'
-movies = [
-    {'title': 'My Neighbor Totoro', 'year': '1988'},
-    {'title': 'Dead Poets Society', 'year': '1989'},
-    {'title': 'A Perfect World', 'year': '1993'},
-    {'title': 'Leon', 'year': '1994'},
-    {'title': 'Mahjong', 'year': '1996'},
-    {'title': 'Swallowtail Butterfly', 'year': '1996'},
-    {'title': 'King of Comedy', 'year': '1999'},
-    {'title': 'Devils on the Doorstep', 'year': '1999'},
-    {'title': 'WALL-E', 'year': '2008'},
-    {'title': 'The Pork of Music', 'year': '2012'},
-]
+    user = User.query.first()
+    movies = Movie.query.all()
+    return render_template('index.html', user=user, movies=movies)
