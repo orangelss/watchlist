@@ -2,8 +2,10 @@ from flask import Flask, escape, url_for, render_template, request, redirect, fl
 from flask_sqlalchemy import SQLAlchemy
 import os, click
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+app.secret_key = 'lkfjlasjhfasf'
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
@@ -21,8 +23,16 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False  # 关闭对模型修改的
 db = SQLAlchemy(app)
 
 class User(db.Model, UserMixin):
-    id = db.Column(db.Integer, primary_key=True)  # id 主键
-    name = db.Column(db.String(20))  # 名字
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(20))
+    username = db.Column(db.String(20))  # 用户名
+    password_hash = db.Column(db.String(128))  # 密码散列值
+
+    def set_password(self, password):  # 用来设置密码的方法，接受密码作为参数
+        self.password_hash = generate_password_hash(password)  # 将生成的密码保持到对应字段
+
+    def validate_password(self, password):  # 用于验证密码的方法，接受密码作为参数
+        return check_password_hash(self.password_hash, password)  # 返回布尔值
 
 class Movie(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -55,8 +65,6 @@ def forge():
     db.session.commit()
     click.echo('Done.')
 
-import click
-
 @app.cli.command()
 @click.option('--username', prompt=True, help='The username used to login.')
 @click.option('--password', prompt=True, confirmation_prompt=True, help='The password used to login.')
@@ -87,22 +95,22 @@ def inject_user():
 def page_not_found(e):
     return render_template('404.html'), 404
 
-@app.route('/', methods = ['GET', 'POST'])
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    if request.method == 'POST':
-        if not current_user.is_authenticated:  # 如果当前用户未认证
-            return redirect(url_for('index'))  # 重定向到主页
-        title = request.form.get('title')
+    if request.method == 'POST':  # 判断是否是 POST 请求
+        # 获取表单数据
+        title = request.form.get('title')  # 传入表单对应输入字段的 name 值
         year = request.form.get('year')
-        if not title or year or len(year) > 4 or len(title) > 60:
-            flash('Invalid input.')
-            return redirect(url_for('index'))
-        #保存表单数据到数据库
-        movie = Movie(title = title, year = year)
-        db.session.add(movie)
-        db.session.commit()
-        flash('Item create.')
-        return redirect(url_for('index'))
+        # 验证数据
+        if not title or not year or len(year) > 4 or len(title) > 60:
+            flash('Invalid input.')  # 显示错误提示
+            return redirect(url_for('index'))  # 重定向回主页
+        # 保存表单数据到数据库
+        movie = Movie(title=title, year=year)  # 创建记录
+        db.session.add(movie)  # 添加到数据库会话
+        db.session.commit()  # 提交数据库会话
+        flash('Item created.')  # 显示成功创建的提示
+        return redirect(url_for('index'))  # 重定向回主页
 
     movies = Movie.query.all()
     return render_template('index.html', movies=movies)
